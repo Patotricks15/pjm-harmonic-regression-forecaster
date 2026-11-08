@@ -40,14 +40,13 @@ KAGGLE_API_TOKEN=... .venv/bin/kaggle datasets download -d robikscube/hourly-ene
 The PJME zone is `data/PJME_hourly.csv` (columns `Datetime`, `PJME_MW`). The
 data directory is git-ignored.
 
-Repair policy in `load_hourly_csv` (fixed, applied before any backtest split):
+Repair policy in `load_hourly_csv` (causal, so no repaired value depends on future data):
 
 - Duplicated timestamps (the repeated hour at the end of daylight saving time)
   keep the first record in file order. This affects 4 hours in the PJME file.
-- Missing hours are filled by linear interpolation over the full history. This
-  affects 30 hours. A gap that falls inside a test window is filled from its
-  neighbours, which is a mild form of look-ahead for those few hours; it is
-  stated here rather than hidden.
+- Missing hours are forward-filled from the last observed value. This affects
+  30 hours in the PJME file. The last of them (2018-03-11) is before the first
+  evaluated test window (2018-06-29), so repairs do not enter any evaluation.
 - NaN values in the file raise an error.
 
 ## Usage
@@ -88,7 +87,7 @@ CSV. Interpretation and next steps are not yet written up.
   Fourier shapes, periodicity, serving-batch parity, spec agreement.
 - `test_features_leakage.py`: future values do not change training or forecasts;
   training ends at the origin; shuffling time degrades the model.
-- `test_data_pjm.py`: loader keeps the first duplicate, interpolates gaps, rejects NaNs.
+- `test_data_pjm.py`: loader keeps the first duplicate, forward-fills gaps from the past only, and rejects NaNs.
 - `test_harmonic.py`, `test_backtest_splits.py`, `test_metrics.py`: model
   outputs, fold geometry, metric definitions.
 
@@ -96,10 +95,11 @@ CSV. Interpretation and next steps are not yet written up.
 
 Implemented: method core, rolling-origin backtest, metrics, CLI, tests, CI.
 
-Not yet done (from the project plan's definition of done):
+## Scope
+
+Out of scope for this project: Terraform, Floci, and architecture or method
+diagrams. Not yet done:
 
 - Results on PJME are reported above; the harmonic models do not yet beat the daily seasonal naive.
-- Terraform and Floci setup.
-- Architecture and method diagrams.
 - LaTeX write-up.
 - Order selection for ARIMA errors is fixed at (2,0,1); it is not searched.
