@@ -30,12 +30,25 @@ training and forecasting.
 
 The real series is PJM hourly load from Kaggle,
 [`robikscube/hourly-energy-consumption`](https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption)
-(CC0). Download `PJME_hourly.csv` and pass its path to the CLI. This repository
-does not ship the data.
+(CC0). Download it with the Kaggle CLI, using a `KAGGLE_API_TOKEN` in the
+environment (the token is never stored in the repository):
 
-The loader is strict and does not impute: duplicate timestamps, NaNs, and
-missing hours raise an error. Daylight-saving fall-back can create duplicated
-local timestamps in this file; resolving them is a pending decision (see below).
+```bash
+KAGGLE_API_TOKEN=... .venv/bin/kaggle datasets download -d robikscube/hourly-energy-consumption -p data --unzip
+```
+
+The PJME zone is `data/PJME_hourly.csv` (columns `Datetime`, `PJME_MW`). The
+data directory is git-ignored.
+
+Repair policy in `load_hourly_csv` (fixed, applied before any backtest split):
+
+- Duplicated timestamps (the repeated hour at the end of daylight saving time)
+  keep the first record in file order. This affects 4 hours in the PJME file.
+- Missing hours are filled by linear interpolation over the full history. This
+  affects 30 hours. A gap that falls inside a test window is filled from its
+  neighbours, which is a mild form of look-ahead for those few hours; it is
+  stated here rather than hidden.
+- NaN values in the file raise an error.
 
 ## Usage
 
@@ -53,8 +66,21 @@ python3 -m venv .venv
 ```
 
 The CLI prints a mean/std summary per model and writes one row per
-(model, fold) to `--out`. Expect the harmonic ARIMA runs to be slow: each fold
-fits 9 SARIMAX models for the AIC grid.
+(model, fold) to `--out`.
+
+## Results (PJME, horizon 168 h, 5 rolling-origin folds, 8-week training window)
+
+| model | MASE mean (std) | sMAPE % mean (std) | MAE mean (std) | RMSE mean (std) |
+|---|---|---|---|---|
+| seasonal_naive_24 | **1.447** (0.747) | **11.62** (5.13) | **4342** (1966) | **5372** (2210) |
+| harmonic_arima | 1.688 (1.266) | 13.63 (8.46) | 4977 (3257) | 5965 (3489) |
+| harmonic_ols | 1.747 (1.404) | 14.13 (9.72) | 5131 (3639) | 5996 (3762) |
+| seasonal_naive_168 | 1.890 (1.067) | 15.23 (6.96) | 5602 (2670) | 6601 (2763) |
+
+On this data the harmonic models do not beat the daily seasonal naive. The
+harmonic ARIMA beats the OLS harmonic model and the weekly seasonal naive. The
+folds have high variance, so these averages should be read with the per-fold
+CSV. Interpretation and next steps are not yet written up.
 
 ## Tests
 
@@ -62,7 +88,7 @@ fits 9 SARIMAX models for the AIC grid.
   Fourier shapes, periodicity, serving-batch parity, spec agreement.
 - `test_features_leakage.py`: future values do not change training or forecasts;
   training ends at the origin; shuffling time degrades the model.
-- `test_data_pjm.py`: loader rejects duplicates and gaps.
+- `test_data_pjm.py`: loader keeps the first duplicate, interpolates gaps, rejects NaNs.
 - `test_harmonic.py`, `test_backtest_splits.py`, `test_metrics.py`: model
   outputs, fold geometry, metric definitions.
 
@@ -72,9 +98,8 @@ Implemented: method core, rolling-origin backtest, metrics, CLI, tests, CI.
 
 Not yet done (from the project plan's definition of done):
 
+- Results on PJME are reported above; the harmonic models do not yet beat the daily seasonal naive.
 - Terraform and Floci setup.
 - Architecture and method diagrams.
 - LaTeX write-up.
-- Results on the real PJM data (the file is not in the repository).
-- Decision on DST duplicate timestamps.
 - Order selection for ARIMA errors is fixed at (2,0,1); it is not searched.

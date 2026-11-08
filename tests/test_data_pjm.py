@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -18,13 +19,21 @@ def test_loads_regular_hourly_series(tmp_path):
     assert series.index.freqstr == "h"
 
 
-def test_duplicate_timestamps_raise(tmp_path):
-    ts = ["2015-01-01 00:00:00", "2015-01-01 01:00:00", "2015-01-01 01:00:00"]
-    with pytest.raises(ValueError, match="duplicated"):
-        load_hourly_csv(_write(tmp_path, ts))
+def test_duplicate_timestamp_keeps_first_record(tmp_path):
+    ts = ["2014-11-02 00:00:00", "2014-11-02 01:00:00", "2014-11-02 01:00:00", "2014-11-02 02:00:00"]
+    series = load_hourly_csv(_write(tmp_path, ts, [1.0, 2.0, 9.0, 3.0]))
+    assert len(series) == 3
+    assert series.iloc[1] == 2.0
 
 
-def test_missing_hours_raise_without_imputation(tmp_path):
+def test_missing_hour_is_linearly_interpolated(tmp_path):
     ts = ["2015-01-01 00:00:00", "2015-01-01 01:00:00", "2015-01-01 03:00:00"]
-    with pytest.raises(ValueError, match="missing hourly"):
-        load_hourly_csv(_write(tmp_path, ts))
+    series = load_hourly_csv(_write(tmp_path, ts, [10.0, 20.0, 40.0]))
+    assert series.index.freqstr == "h"
+    assert series.iloc[2] == pytest.approx(30.0)
+
+
+def test_nan_values_raise(tmp_path):
+    ts = ["2015-01-01 00:00:00", "2015-01-01 01:00:00"]
+    with pytest.raises(ValueError, match="missing values"):
+        load_hourly_csv(_write(tmp_path, ts, [1.0, np.nan]))

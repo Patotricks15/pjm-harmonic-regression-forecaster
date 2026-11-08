@@ -10,23 +10,20 @@ def load_hourly_csv(
     value_column: str = "PJME_MW",
     time_column: str = "Datetime",
 ) -> pd.Series:
-    """Load an hourly series and fail fast on any structural problem.
+    """Load an hourly series with a fixed, documented repair policy.
 
-    The loader does not impute. Duplicated or missing hours raise, so no
-    interpolation can leak future values into the training windows.
+    Duplicated timestamps (the repeated hour at the end of daylight saving time)
+    keep the first record in file order. Missing hours are filled by linear
+    interpolation over the full history, before any backtest split. Missing
+    values inside the file (NaN) still raise.
     """
     frame = pd.read_csv(path, parse_dates=[time_column])
-    series = frame.set_index(time_column)[value_column].astype(float).sort_index()
+    series = frame.set_index(time_column)[value_column].astype(float)
+    series = series.sort_index(kind="stable")
+    series = series[~series.index.duplicated(keep="first")]
 
-    if series.index.has_duplicates:
-        duplicated = int(series.index.duplicated().sum())
-        raise ValueError(f"{duplicated} duplicated timestamps; deduplicate before use")
     if series.isna().any():
         raise ValueError(f"{int(series.isna().sum())} missing values in {value_column}")
 
-    expected = pd.date_range(series.index[0], series.index[-1], freq="h")
-    missing = expected.difference(series.index)
-    if len(missing) > 0:
-        raise ValueError(f"{len(missing)} missing hourly timestamps; first: {missing[0]}")
-
-    return series.asfreq("h")
+    hourly = series.asfreq("h")
+    return hourly.interpolate(method="linear", limit_area="inside")
