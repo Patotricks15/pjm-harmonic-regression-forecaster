@@ -10,12 +10,12 @@ def load_hourly_csv(
     value_column: str = "PJME_MW",
     time_column: str = "Datetime",
 ) -> pd.Series:
-    """Load an hourly series with a fixed, documented repair policy.
+    """Load an hourly series with a fixed, causal repair policy.
 
     Duplicated timestamps (the repeated hour at the end of daylight saving time)
-    keep the first record in file order. Missing hours are filled by linear
-    interpolation over the full history, before any backtest split. Missing
-    values inside the file (NaN) still raise.
+    keep the first record in file order. Missing hours are forward-filled from
+    the last observed value, so a repaired value never depends on later data.
+    NaN values in the file raise an error.
     """
     frame = pd.read_csv(path, parse_dates=[time_column])
     series = frame.set_index(time_column)[value_column].astype(float)
@@ -25,5 +25,4 @@ def load_hourly_csv(
     if series.isna().any():
         raise ValueError(f"{int(series.isna().sum())} missing values in {value_column}")
 
-    hourly = series.asfreq("h")
-    return hourly.interpolate(method="linear", limit_area="inside")
+    return series.asfreq("h").ffill()
