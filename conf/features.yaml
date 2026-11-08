@@ -1,0 +1,7 @@
+# Candidate Fourier design for the harmonic regression. Every combination of
+# harmonics across periods is evaluated by AIC on each training window.
+seasonal_fourier:
+  - period: 24      # daily cycle in hourly data
+    harmonics: [2, 4, 6]
+  - period: 168     # weekly cycle in hourly data
+    harmonics: [1, 2, 3]
